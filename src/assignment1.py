@@ -1,9 +1,11 @@
 import json
 from anytree import Node, RenderTree, search
 from anytree.importer import JsonImporter
+
+
 def computeTraces(current_node, current_trace):
     new_path = current_trace + [current_node.name]
-    if current_node.is_leaf == True:
+    if current_node.is_leaf is True:
         # New path may be a separate branch or a cluster of paths/branches
         return [new_path]
     node_type = getattr(current_node, 'type', 'N/A')
@@ -33,6 +35,8 @@ def computeTraces(current_node, current_trace):
                     new_traces.append(existing_branch + new_branch)
             current_branches = new_traces
         return new_traces
+
+
 def main():
     traces = []
     importer = JsonImporter()
@@ -44,6 +48,8 @@ def main():
     print(target_node)
     output = computeTraces(target_node, traces)
     print(output)
-    #DotExporter(root, nodenamefunc=format_node_label).to_picture("goal_tree.png")
+    # DotExporter(root, nodenamefunc=format_node_label).to_picture("goal_tree.png")
+
+
 if __name__ == "__main__":
     main()
