@@ -40,15 +40,8 @@ def check_norm(node, norm):
 
     elif norm['type'] == 'O':
         # check for satisfaction
-        child_satisfied = [not res for res in child_results]
-
-        if node_type == 'OR':
-            # all choices must satisfy the norm
-            is_satisfied = all(child_satisfied)
-        else:
-            # for SEQ/AND, only one needs to satisfy the norm
-            is_satisfied = any(child_satisfied)
-
+        # Is true if any child is satisfied
+        is_satisfied = any(not res for res in child_results)
         node.violation = not is_satisfied
 
     return node.violation
