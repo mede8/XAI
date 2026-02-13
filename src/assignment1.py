@@ -16,7 +16,7 @@ def computeTraces(current_node, current_trace):
             branching_traces += computeTraces(child, new_path)
         return branching_traces
     else:
-        # Here we need to append the remaining paths to all already existing branches. 
+        # Here we need to append the remaining paths to all already existing branches.
         # This can also add even more branches 
         # if it finds more OR types to split branches
         # Wrapping it up in order to be able to use for to go through branches
