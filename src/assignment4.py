@@ -1,5 +1,5 @@
 import json
-from anytree import Node, RenderTree, search
+from anytree import Node, RenderTree, search, SymlinkNode
 from anytree.importer import JsonImporter
 
 import json
@@ -29,6 +29,8 @@ def computeTraces(current_node, current_trace):
                 for new_branch in appending_branches:
                     new_traces.append(existing_branch + new_branch)
             current_branches = new_traces
+
+            
         return current_branches
 
 
@@ -40,11 +42,11 @@ def is_norm_violated(trace, norm):
     For an Obligation (O): it's violated if none of the actions in the trace
     are in norm['actions'].
     """
-    action_names = [node.name for node in trace if node.is_leaf]
+    names = [node.name for node in trace]
     if norm['type'] == 'P':
-        return any(action in norm['actions'] for action in action_names)
+        return any(a in norm['actions'] for a in names)
     elif norm['type'] == 'O':
-        return not any(action in norm['actions'] for action in action_names)
+        return not any(a in norm['actions'] for a in names)
     return False
 
 
@@ -102,7 +104,7 @@ def is_preferred(costs1, costs2, preference_order):
 
 
 
-def explain_action(trace, action_name, root, initial_beliefs, norm, preferences):
+def explain_action(trace, action_name, root, initial_beliefs, norm, preferences):    
     # empty if action not in trace
     if action_name not in trace:
         return []
@@ -122,13 +124,14 @@ def explain_action(trace, action_name, root, initial_beliefs, norm, preferences)
     def chosen_child_for(or_node):
         # pick the child whose subtree contains the action we’re explaining
         for child in or_node.children:
-            if action_name in {leaf.name for leaf in child.leaves}:
+            # if child is in trace, it must be on the path to the action node 
+            if child in trace_nodes or action_name in {leaf.name for leaf in child.leaves}:            
                 return child
         return None
     
     # iterate through trace up to and including the action to explain
     for i in range(idx + 1):
-        node = trace_nodes[i]
+        node = trace_nodes[i]        
 
         # P factors for action nodes (only if they have preconditions, otherwise no P factor)
         if node is not None and node.is_leaf:
@@ -141,12 +144,13 @@ def explain_action(trace, action_name, root, initial_beliefs, norm, preferences)
             beliefs.update(getattr(node, "post", []))
             continue  # ACT handled; OR nodes shouldn’t also update beliefs here
 
-        # OR node explanations (C, V, N)
+        # OR node explanations (C, V, N)        
         if node is not None and getattr(node, "type", None) == "OR":
-            chosen = chosen_child_for(node)
+            chosen = chosen_child_for(node)                      
+             
             if chosen is None:
-                continue  # OR not relevant to action_name
-
+                continue  # OR not relevant to action_name           
+            
             # C factor
             pre_c = getattr(chosen, "pre", [])
             if pre_c:
@@ -168,16 +172,28 @@ def explain_action(trace, action_name, root, initial_beliefs, norm, preferences)
             violating_alt = None
 
             for alt in node.children:
+
                 if alt == chosen:
                     continue
-
+                    
                 alt_traces = computeTraces(alt, [])
+                
+                # explanations.append(["length alt traces =", len(alt_traces[0])])
+                                
                 if not alt_traces:
                     continue
 
                 # N check: any trace violates?
-                if violating_alt is None and any(is_norm_violated(t, norm) for t in alt_traces):
-                    violating_alt = alt
+                    
+                for t_idx, t in enumerate(alt_traces):
+                    # explanations.append(["checking alt trace", alt.name, t_idx, [n.name for n in t]])
+                    if is_norm_violated(t, norm):
+                            violating_alt = alt
+                            break
+
+                # if any(is_norm_violated(alt_traces[0], norm)) and violating_alt is None:
+                #     violating_alt = alt
+                        
 
                 # V candidate: best cost among unchosen
                 alt_cost = compute_trace_cost(alt_traces[0])
@@ -193,10 +209,31 @@ def explain_action(trace, action_name, root, initial_beliefs, norm, preferences)
             if violating_alt is not None:
                 explanations.append(["N", violating_alt.name, norm_str])
 
+            # F factor (failed condition)
+            pre_alt = getattr(chosen, "pre", [])
+            for condition in pre_alt:
+                if condition is not None and condition not in beliefs:
+                    not_sat_alt = [p for p in pre_alt if p not in beliefs]
+                    explanations.append(["F", chosen.name, not_sat_alt])
             
+        # L factor (linked node)
+        if node is not None and isinstance(node, SymlinkNode):
+            explanations.append(["L", node.name, node.target.name])
+        
+    
+    # D factor (goal and subgoals from walking up the trace)
+    action_node = trace_nodes[idx]
+    seen=set()
+    if action_node is not None:
+        p = action_node.parent
+        while p is not None:
+            if getattr(p, "type", None) in {"OR", "SEQ", "AND"} or p is root:
+                if p.name not in seen:
+                    explanations.append(["D", p.name])
+                    seen.add(p.name)
+            p = p.parent
 
-    # F, L, D to be added 
-
+          
     # add U at the end
     explanations.append(["U", preferences[0], preferences[1]])
 
