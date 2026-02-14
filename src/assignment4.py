@@ -42,11 +42,13 @@ def is_norm_violated(trace, norm):
     For an Obligation (O): it's violated if none of the actions in the trace
     are in norm['actions'].
     """
-    names = [node.name for node in trace]
+    names = [node.name.lower() for node in trace]
+    # normalize norm actions once
+    norm_actions = [a.lower() for a in norm['actions']]
     if norm['type'] == 'P':
-        return any(a in norm['actions'] for a in names)
+        return any(a in norm_actions for a in names)
     elif norm['type'] == 'O':
-        return not any(a in norm['actions'] for a in names)
+        return not any(a in norm_actions for a in names)
     return False
 
 
@@ -184,16 +186,11 @@ def explain_action(trace, action_name, root, initial_beliefs, norm, preferences)
                     continue
 
                 # N check: any trace violates?
-                    
-                for t_idx, t in enumerate(alt_traces):
-                    # explanations.append(["checking alt trace", alt.name, t_idx, [n.name for n in t]])
-                    if is_norm_violated(t, norm):
+                for t_idx, t in enumerate(alt_traces):                    
+                    if is_norm_violated(t, norm) != False and violating_alt is None:
                             violating_alt = alt
                             break
 
-                # if any(is_norm_violated(alt_traces[0], norm)) and violating_alt is None:
-                #     violating_alt = alt
-                        
 
                 # V candidate: best cost among unchosen
                 alt_cost = compute_trace_cost(alt_traces[0])
@@ -252,6 +249,7 @@ def main():
     with open('coffee.json', 'r') as file:
         data = file.read()
     root = importer.import_(data)
+    explanation = []
 
     # enumerate all possible traces (as node objects for access to
     # pre/post/costs)
