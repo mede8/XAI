@@ -609,10 +609,11 @@ if __name__ == "__main__":
     output_file_path = "explanations_output.txt"
     all_output_blocks = []
 
+    # used gemini for the .txt layout
     document_header = "\n".join([
         divider_line("="),
-        "EXPLAINABLE AI (INFOMXAI) — PROJECT 1, PART 2",
-        "Natural Language Explanations for Agent Decision-Making",
+        "EXPLAINABLE AI (INFOMXAI) - PROJECT 1, PART 2",
+        "Natural Language Explanations for Agent Decision Making",
         divider_line("="),
         "",
     ])
@@ -649,4 +650,4 @@ if __name__ == "__main__":
     with open(output_file_path, "w", encoding="utf-8") as output_file:
         output_file.write(full_document)
 
-    print(f"Output saved to: {output_file_path}")
+    print(f"saved to: {output_file_path}")
