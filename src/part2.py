@@ -15,7 +15,9 @@ import re
 import sys
 import textwrap
 import time
-import google.generativeai as genai
+from google import genai 
+
+print(sys.path)
 
 try:
     from assignment4 import main as run_assignment4
@@ -171,6 +173,22 @@ def translate_factor_to_sentence(factor, value_dimension_names):
         rejected_cost_string = format_cost_vector(
             rejected_costs, value_dimension_names
         )
+        # look what dimension was the deciding factor based on the priority order
+        deciding_factor = None
+        for dim_index in range(len(value_dimension_names)):
+            if chosen_costs[dim_index] < rejected_costs[dim_index]:
+                deciding_factor = value_dimension_names[dim_index]
+                break
+            elif chosen_costs[dim_index] > rejected_costs[dim_index]:
+                deciding_factor = value_dimension_names[dim_index]
+                break
+        if deciding_factor:
+            return (
+                f"The option '{chosen_words}' {chosen_cost_string}' was preferred over "
+                f"'{rejected_words}' {rejected_cost_string}' because it scored better on "
+                f"{deciding_factor} according to your priorities."
+            )
+
         return (
             f"'{chosen_words}' {chosen_cost_string} was preferred over "
             f"'{rejected_words}' {rejected_cost_string} because it "

@@ -2,3 +2,4 @@ coffee.json
 .venv/
 venv/
 env/
+.env
