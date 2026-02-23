@@ -15,7 +15,7 @@ import re
 import sys
 import textwrap
 import time
-from google import genai 
+from google import genai
 
 print(sys.path)
 
@@ -29,7 +29,7 @@ except ImportError:
 
 
 # Gemini API - go to aigooglestudio.com to make your own and paste it in ""
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "") #->add the api here 
+GEMINI_API_KEY = os.environ.get("AIzaSyC_G_CAH7oqEfvoPQPA54wIny95wsLynb8", "")  # ->add the api here
 
 try:
     if GEMINI_API_KEY:
@@ -362,7 +362,7 @@ def generate_explanation(
     preferences,
     action_to_explain,
 ):
-    """Run the full explanation pipeline for a single scenario. 
+    """Run the full explanation pipeline for a single scenario.
         Calls ass. 4 to get the selected trace and formal factors.
         Then translate factors to English via the RB layer.
         Finally synthesizes into fluent explanations via Gemini.
