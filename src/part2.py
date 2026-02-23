@@ -29,7 +29,7 @@ except ImportError:
 
 
 # Gemini API - go to aigooglestudio.com to make your own and paste it in ""
-GEMINI_API_KEY = os.environ.get("AIzaSyC_G_CAH7oqEfvoPQPA54wIny95wsLynb8", "")  # ->add the api here
+GEMINI_API_KEY = os.environ.get("GOOGLE GEMINI API", "")  # ->add the api here
 
 try:
     if GEMINI_API_KEY:
