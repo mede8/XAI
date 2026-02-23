@@ -186,7 +186,7 @@ def translate_factor_to_sentence(factor, value_dimension_names):
             return (
                 f"The option '{chosen_words}' {chosen_cost_string}' was preferred over "
                 f"'{rejected_words}' {rejected_cost_string}' because it scored better on "
-                f"{deciding_factor} according to your priorities."
+                f"{deciding_factor}, which is preferred according to your priorities."
             )
 
         return (
