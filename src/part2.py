@@ -15,7 +15,9 @@ import re
 import sys
 import textwrap
 import time
-from google import genai 
+from google import genai
+from google.genai import types  # type: ignore
+
 
 print(sys.path)
 
@@ -29,24 +31,59 @@ except ImportError:
 
 
 # Gemini API - go to aigooglestudio.com to make your own and paste it in ""
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "") #->add the api here 
+GEMINI_API_KEY = os.environ.get("GOOGLE_GEMINI_API", "")  # ->add the api here
 
 try:
     if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
+        client = genai.Client(api_key=GEMINI_API_KEY)
         gemini_available = True
+        print("Gemini API successfully initialized.")
     else:
         print(
             "WARNING: No Gemini API key found. "
             "Using rule-based output only.\n"
         )
         gemini_available = False
-except Exception:
+except Exception as e:
     print(
         "WARNING: google-generativeai not installed. "
         "Using rule-based output only.\n"
+        f"Additional errors: {e}"
     )
     gemini_available = False
+
+HUMAN_NAMES = {
+    # Main Goals & Intermediate Nodes
+    "getCoffee": "having coffee",
+    "getKitchenCoffee": "getting coffee from the kitchen",
+    "getStaffCard": "obtaining a staff card",
+    "getAnnOfficeCoffee": "getting coffee from Ann's office",
+    "getShopCoffee": "getting coffee from the shop",
+    
+    # Actions (ACT)
+    "getOwnCard": "using your own card",
+    "getOthersCard": "borrowing a colleague's card",
+    "gotoKitchen": "going to the kitchen",
+    "getCoffeeKitchen": "brewing coffee in the kitchen",
+    "gotoAnnOffice": "walking to Ann's office",
+    "getPod": "picking up a coffee pod",
+    "getCoffeeAnnOffice": "getting coffee in Ann's office",
+    "gotoShop": "walking to the shop",
+    "payShop": "paying at the shop",
+    "getCoffeeShop": "collecting coffee from the shop",
+
+    # Beliefs / Conditions
+    "staffCardAvailable": "a staff card being available",
+    "ownCard": "having your own card",
+    "colleagueAvailable": "a colleague being available to help",
+    "haveCard": "having a card",
+    "atKitchen": "being at the kitchen",
+    "AnnInOffice": "Ann being in her office",
+    "atAnnOffice": "being at Ann's office",
+    "havePod": "having a coffee pod",
+    "haveMoney": "having money for payment",
+    "atShop": "being at the shop"
+}
 
 
 # RB logic -> English sentences
@@ -57,6 +94,8 @@ def camel_to_words(camel_case_name):
         'getCoffeeKitchen' -> 'get coffee kitchen'
         'AnnInOffice'      -> 'ann in office'
     """
+    if camel_case_name in HUMAN_NAMES:
+        return HUMAN_NAMES[camel_case_name]
     spaced = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', camel_case_name)
     spaced = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', spaced)
     return spaced.lower()
@@ -119,7 +158,7 @@ def format_norm_as_sentence(norm_expression):
     )
 
 
-def translate_factor_to_sentence(factor, value_dimension_names):
+def translate_factor_to_sentence(factor, preferences):
     """Translate a single formal explanation factor into an english sentence.
 
     Each factor is a list whose first element is a letter code identifying
@@ -129,6 +168,10 @@ def translate_factor_to_sentence(factor, value_dimension_names):
         return ""
 
     factor_type = factor[0]
+
+    # extract names and priority order from the preferences list
+    value_dimension_names = preferences[0] if preferences else []
+    priority_order = preferences[1] if len(preferences) > 1 else []
 
     if factor_type == "P":
         action_name = factor[1]
@@ -165,34 +208,39 @@ def translate_factor_to_sentence(factor, value_dimension_names):
         chosen_costs = factor[2]
         rejected_option = factor[4]
         rejected_costs = factor[5]
+
         chosen_words = camel_to_words(chosen_option)
         rejected_words = camel_to_words(rejected_option)
-        chosen_cost_string = format_cost_vector(
-            chosen_costs, value_dimension_names
-        )
-        rejected_cost_string = format_cost_vector(
-            rejected_costs, value_dimension_names
-        )
-        # look what dimension was the deciding factor based on the priority order
+
+        # loop through the dimensions strictly on the user's priority order
         deciding_factor = None
-        for dim_index in range(len(value_dimension_names)):
-            if chosen_costs[dim_index] < rejected_costs[dim_index]:
-                deciding_factor = value_dimension_names[dim_index]
-                break
-            elif chosen_costs[dim_index] > rejected_costs[dim_index]:
-                deciding_factor = value_dimension_names[dim_index]
-                break
+        direction = "better aligns with your priorities" # Default fallback
+        
+        if priority_order:
+            for dim_index in priority_order:
+                # find the first prioritised dimension where the two options differ
+                if chosen_costs[dim_index] != rejected_costs[dim_index]:
+                    deciding_factor = value_dimension_names[dim_index]
+                    
+                    # Logic check: in this system, lower cost = better/preferred
+                    if chosen_costs[dim_index] < rejected_costs[dim_index]:
+                        if deciding_factor == 'price':
+                            direction = "is more affordable"
+                        elif deciding_factor == 'time':
+                            direction = "takes less time"
+                        elif deciding_factor == 'quality':
+                            direction = "offers better quality"
+                    break
+
         if deciding_factor:
             return (
-                f"The option '{chosen_words}' {chosen_cost_string}' was preferred over "
-                f"'{rejected_words}' {rejected_cost_string}' because it scored better on "
-                f"{deciding_factor}, which is preferred according to your priorities."
+                f"The option '{chosen_words}' was preferred over "
+                f"'{rejected_words}' because it {direction}."
             )
 
         return (
-            f"'{chosen_words}' {chosen_cost_string} was preferred over "
-            f"'{rejected_words}' {rejected_cost_string} because it "
-            f"scored better on your priorities."
+            f"The option '{chosen_words}' was preferred over "
+            f"'{rejected_words}' because it {direction}."
         )
 
     if factor_type == "N":
@@ -250,7 +298,7 @@ def translate_factor_to_sentence(factor, value_dimension_names):
 def build_rule_based_explanation(
     action_to_explain,
     formal_explanation_factors,
-    value_dimension_names,
+    preferences,  # cahnged to preferences to catch more details
 ):
     """Convert all formal factors into a structured paragraph.
 
@@ -261,10 +309,29 @@ def build_rule_based_explanation(
         f"You asked why the agent performed '{action_words}'. "
         f"Here is the explanation:\n"
     ]
-    for factor in formal_explanation_factors:
-        sentence = translate_factor_to_sentence(
-            factor, value_dimension_names
-        )
+
+    # extract and aggregate goals
+    goal_factors = [f for f in formal_explanation_factors if f[0] == "D"]
+    if goal_factors:
+        # filter out goals that are the same as the explained action
+        goals = [camel_to_words(f[1]) for f in goal_factors if camel_to_words(f[1]) != action_words]
+        if len(goals) == 1:
+            sentences.append(f"The action contributes to achieving the goal: '{goals[0]}'.")
+        else:
+            intermediate_goals = "', '".join(goals[:-1])
+            final_goal = goals[-1]
+            sentences.append(
+                f"This action contributes to your intermediate goal(s) of '{intermediate_goals}', "
+                f"ultimately serving your main goal to '{final_goal}'."
+            )
+
+    # filter the information as it sounds too robotic and repeats itself
+    # specifically, keep constrast (V), norms (N), and priorities (U), failed conditions (F)
+    allowed_factors = {"V", "N", "U", "F"}
+    filtered_factors = [f for f in formal_explanation_factors if f[0] in allowed_factors]
+
+    for factor in filtered_factors:
+        sentence = translate_factor_to_sentence(factor, preferences)
         if sentence:
             sentences.append(sentence)
     return "\n".join(sentences)
@@ -292,6 +359,20 @@ Rules:
   then why alternatives were rejected, then what goal this serves.
 - Aim for 5-8 sentences. Be concise but complete.
 - Do NOT start with "Sure", "Of course", or "You're wondering".
+- Focus on "Contrastive Reasoning": When comparing two options (Factor V), 
+  explicitly state the trade-off. 
+  Example: "Even though the shop coffee is faster to get, the agent 
+  chose the kitchen because your top priority is price, and the 
+  kitchen coffee is free."
+- Use "Instead of" logic: If an option was rejected due to a rule, 
+  explain that the agent chose Path A *instead of* Path B specifically 
+  to follow that rule.
+- Strict Past Tense: "Always write the explanation 
+  in the past tense (e.g., 'The agent chose,' 'The agent walked') 
+  as you are explaining a decision that has already been made."
+- Autonomous Agency: "Never say the agent 'had you' do something or 
+  'chose for you' to do something. The agent is the actor. Say 
+  'The agent borrowed the card' or 'The agent walked to the office.'"
 """
 
 
@@ -300,8 +381,7 @@ def synthesize_with_gemini(
     rule_based_text,
     scenario_context,
 ):
-    """Send the rule-based sentences to Gemini.
-    """
+    """Send the rule-based sentences to Gemini."""
     if not gemini_available:
         return rule_based_text
 
@@ -326,13 +406,15 @@ def synthesize_with_gemini(
     )
 
     try:
-        gemini_model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            system_instruction=GEMINI_SYSTEM_PROMPT,
-        )
         for attempt in range(3):
             try:
-                response = gemini_model.generate_content(user_prompt)
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=GEMINI_SYSTEM_PROMPT,
+                    )
+                )
                 return response.text.strip()
             except Exception as error:
                 rate_limited = "429" in str(error)
@@ -362,7 +444,7 @@ def generate_explanation(
     preferences,
     action_to_explain,
 ):
-    """Run the full explanation pipeline for a single scenario. 
+    """Run the full explanation pipeline for a single scenario.
         Calls ass. 4 to get the selected trace and formal factors.
         Then translate factors to English via the RB layer.
         Finally synthesizes into fluent explanations via Gemini.
@@ -386,12 +468,10 @@ def generate_explanation(
         )
         return message, selected_trace, formal_factors
 
-    value_dimension_names = preferences[0] if preferences else []
-
     rule_based_text = build_rule_based_explanation(
         action_to_explain,
         formal_factors,
-        value_dimension_names,
+        preferences,
     )
 
     scenario_context = {
@@ -496,7 +576,8 @@ def format_scenario_block(
 
     output_lines.append("SELECTED EXECUTION TRACE")
     output_lines.append(divider_line("-"))
-    output_lines.append(" -> ".join(selected_trace))
+    human_trace = [camel_to_words(step) for step in selected_trace]
+    output_lines.append(" -> ".join(human_trace))
     output_lines.append("")
 
     output_lines.append("FORMAL EXPLANATION FACTORS")
