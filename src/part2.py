@@ -8,7 +8,6 @@ Description: Generates natural language explanations for an ai agent's
              prose using the Gemini API. (Falls back to rule-based output if
              the API is unavailable.)
 """
-
 import json
 import os
 import re
@@ -52,21 +51,56 @@ except Exception as e:
     )
     gemini_available = False
 
+HUMAN_NAMES = {
+    # Main Goals & Intermediate Nodes
+    "getCoffee": "having coffee",
+    "getKitchenCoffee": "getting coffee from the kitchen",
+    "getStaffCard": "obtaining a staff card",
+    "getAnnOfficeCoffee": "getting coffee from Ann's office",
+    "getShopCoffee": "getting coffee from the shop",
+
+    # Actions (ACT)
+    "getOwnCard": "using your own card",
+    "getOthersCard": "borrowing a colleague's card",
+    "gotoKitchen": "going to the kitchen",
+    "getCoffeeKitchen": "brewing coffee in the kitchen",
+    "gotoAnnOffice": "walking to Ann's office",
+    "getPod": "picking up a coffee pod",
+    "getCoffeeAnnOffice": "getting coffee in Ann's office",
+    "gotoShop": "walking to the shop",
+    "payShop": "paying at the shop",
+    "getCoffeeShop": "collecting coffee from the shop",
+
+    # Beliefs / Conditions
+    "staffCardAvailable": "a staff card being available",
+    "ownCard": "having your own card",
+    "colleagueAvailable": "a colleague being available to help",
+    "haveCard": "having a card",
+    "atKitchen": "being at the kitchen",
+    "AnnInOffice": "Ann being in her office",
+    "atAnnOffice": "being at Ann's office",
+    "havePod": "having a coffee pod",
+    "haveMoney": "having money for payment",
+    "atShop": "being at the shop"
+}
+
 
 # RB logic -> English sentences
-def camel_to_words(camel_case_name):
+def camel_to_words(camel_case_name: str) -> str:
     """Convert a camelCase or PascalCase name to lowercase readable words.
 
     Example:
         'getCoffeeKitchen' -> 'get coffee kitchen'
         'AnnInOffice'      -> 'ann in office'
     """
+    if camel_case_name in HUMAN_NAMES:
+        return HUMAN_NAMES[camel_case_name]
     spaced = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', camel_case_name)
     spaced = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', spaced)
     return spaced.lower()
 
 
-def format_belief_list(belief_names):
+def format_belief_list(belief_names: list[str]) -> str:
     """Format a list of belief names into a readable English enumeration.
 
     Example:
@@ -81,7 +115,7 @@ def format_belief_list(belief_names):
     return f"{joined} and '{readable[-1]}'"
 
 
-def format_cost_vector(cost_values, value_dimension_names):
+def format_cost_vector(cost_values: list[float], value_dimension_names: list[str]) -> str:
     """Format a cost vector alongside its dimension names.
 
     Example:
@@ -98,7 +132,7 @@ def format_cost_vector(cost_values, value_dimension_names):
     return "(" + ", ".join(parts) + ")"
 
 
-def format_norm_as_sentence(norm_expression):
+def format_norm_as_sentence(norm_expression: str) -> str:
     """Convert a formal norm string into a plain English sentence fragment.
 
     Example:
@@ -123,7 +157,7 @@ def format_norm_as_sentence(norm_expression):
     )
 
 
-def translate_factor_to_sentence(factor, preferences):
+def translate_factor_to_sentence(factor: list, preferences: list) -> str:
     """Translate a single formal explanation factor into an english sentence.
 
     Each factor is a list whose first element is a letter code identifying
@@ -179,23 +213,33 @@ def translate_factor_to_sentence(factor, preferences):
 
         # loop through the dimensions strictly on the user's priority order
         deciding_factor = None
+        direction = "better aligns with your priorities"  # Default fallback
+
         if priority_order:
             for dim_index in priority_order:
                 # find the first prioritised dimension where the two options differ
                 if chosen_costs[dim_index] != rejected_costs[dim_index]:
                     deciding_factor = value_dimension_names[dim_index]
+
+                    # Logic check: in this system, lower cost = better/preferred
+                    if chosen_costs[dim_index] < rejected_costs[dim_index]:
+                        if deciding_factor == 'price':
+                            direction = "is more affordable"
+                        elif deciding_factor == 'time':
+                            direction = "takes less time"
+                        elif deciding_factor == 'quality':
+                            direction = "offers better quality"
                     break
 
         if deciding_factor:
             return (
                 f"The option '{chosen_words}' was preferred over "
-                f"'{rejected_words}' because it is better in terms of "
-                f"{deciding_factor}."
+                f"'{rejected_words}' because it {direction}."
             )
 
         return (
             f"The option '{chosen_words}' was preferred over "
-            f"'{rejected_words}' because it better aligns with your priorities."
+            f"'{rejected_words}' because it {direction}."
         )
 
     if factor_type == "N":
@@ -251,10 +295,10 @@ def translate_factor_to_sentence(factor, preferences):
 
 
 def build_rule_based_explanation(
-    action_to_explain,
-    formal_explanation_factors,
-    preferences,  # cahnged to preferences to catch more details
-):
+    action_to_explain: str,
+    formal_explanation_factors: list,
+    preferences: list,  # changed to preferences to catch more details
+) -> str:
     """Convert all formal factors into a structured paragraph.
 
     This makes the input to the Gemini processing step.
@@ -268,7 +312,8 @@ def build_rule_based_explanation(
     # extract and aggregate goals
     goal_factors = [f for f in formal_explanation_factors if f[0] == "D"]
     if goal_factors:
-        goals = [camel_to_words(f[1]) for f in goal_factors]
+        # filter out goals that are the same as the explained action
+        goals = [camel_to_words(f[1]) for f in goal_factors if camel_to_words(f[1]) != action_words]
         if len(goals) == 1:
             sentences.append(f"The action contributes to achieving the goal: '{goals[0]}'.")
         else:
@@ -313,14 +358,28 @@ Rules:
   then why alternatives were rejected, then what goal this serves.
 - Aim for 5-8 sentences. Be concise but complete.
 - Do NOT start with "Sure", "Of course", or "You're wondering".
+- Focus on "Contrastive Reasoning": When comparing two options (Factor V),
+  explicitly state the trade-off.
+  Example: "Even though the shop coffee is faster to get, the agent
+  chose the kitchen because your top priority is price, and the
+  kitchen coffee is free."
+- Use "Instead of" logic: If an option was rejected due to a rule,
+  explain that the agent chose Path A *instead of* Path B specifically
+  to follow that rule.
+- Strict Past Tense: "Always write the explanation
+  in the past tense (e.g., 'The agent chose,' 'The agent walked')
+  as you are explaining a decision that has already been made."
+- Autonomous Agency: "Never say the agent 'had you' do something or
+  'chose for you' to do something. The agent is the actor. Say
+  'The agent borrowed the card' or 'The agent walked to the office.'"
 """
 
 
 def synthesize_with_gemini(
-    action_to_explain,
-    rule_based_text,
-    scenario_context,
-):
+    action_to_explain: str,
+    rule_based_text: str,
+    scenario_context: dict,
+) -> str:
     """Send the rule-based sentences to Gemini."""
     if not gemini_available:
         return rule_based_text
@@ -377,13 +436,13 @@ def synthesize_with_gemini(
 
 # public API
 def generate_explanation(
-    goal_tree,
-    norm,
-    goal,
-    initial_beliefs,
-    preferences,
-    action_to_explain,
-):
+    goal_tree: dict,
+    norm: dict,
+    goal: list[str],
+    initial_beliefs: list[str],
+    preferences: list,
+    action_to_explain: str,
+) -> tuple[str, list[str], list]:
     """Run the full explanation pipeline for a single scenario.
         Calls ass. 4 to get the selected trace and formal factors.
         Then translate factors to English via the RB layer.
@@ -434,12 +493,12 @@ def generate_explanation(
 LINE_WIDTH = 72
 
 
-def divider_line(character="-"):
+def divider_line(character: str = "-") -> str:
     """Return a full-width divider line using the given character."""
     return character * LINE_WIDTH
 
 
-def wrap_text(raw_text, width=LINE_WIDTH):
+def wrap_text(raw_text: str, width: int = LINE_WIDTH) -> str:
     """Wrap multi-paragraph text to the given line width."""
     wrapped_paragraphs = []
     for paragraph in raw_text.split("\n"):
@@ -452,7 +511,7 @@ def wrap_text(raw_text, width=LINE_WIDTH):
     return "\n".join(wrapped_paragraphs)
 
 
-def format_preference_string(preferences):
+def format_preference_string(preferences: list) -> str:
     """Format a preference pair as a readable priority chain.
 
     Example:
@@ -465,7 +524,7 @@ def format_preference_string(preferences):
     return " > ".join(ordered_names) + " (most important first)"
 
 
-def format_norm_for_display(norm):
+def format_norm_for_display(norm: dict) -> str:
     """Format a norm dictionary as a readable display string."""
     norm_type = norm["type"]
     action_list = ", ".join(norm["actions"])
@@ -480,12 +539,12 @@ def format_norm_for_display(norm):
 
 
 def format_scenario_block(
-    scenario_number,
-    scenario,
-    selected_trace,
-    formal_factors,
-    natural_language_explanation,
-):
+    scenario_number: int,
+    scenario: dict,
+    selected_trace: list[str],
+    formal_factors: list,
+    natural_language_explanation: str,
+) -> str:
     output_lines = []
 
     output_lines.append(divider_line("="))
@@ -516,7 +575,8 @@ def format_scenario_block(
 
     output_lines.append("SELECTED EXECUTION TRACE")
     output_lines.append(divider_line("-"))
-    output_lines.append(" -> ".join(selected_trace))
+    human_trace = [camel_to_words(step) for step in selected_trace]
+    output_lines.append(" -> ".join(human_trace))
     output_lines.append("")
 
     output_lines.append("FORMAL EXPLANATION FACTORS")

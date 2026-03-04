@@ -1,9 +1,14 @@
-import json
-from anytree import Node, RenderTree, search
+from anytree import AnyNode, RenderTree, search
 from anytree.importer import JsonImporter
 
 
-def computeTraces(current_node, current_trace):
+def computeTraces(current_node: AnyNode, current_trace: list[str]) -> list[list[str]]:
+    """Computes all traces from the current node to the leaf nodes.
+
+    :param current_node: the node from which to start the trace.
+    :param current_trace: the trace.
+    :return: a list of all possible execution traces.
+    """
     new_path = current_trace + [current_node.name]
     if current_node.is_leaf is True:
         # New path may be a separate branch or a cluster of paths/branches
@@ -26,10 +31,10 @@ def computeTraces(current_node, current_trace):
             # We only need an appending path for the current branches
             # (which can branch further)
             appending_branches = computeTraces(child, [])
-            # We then look at all our existing traces and add the new found traces 
+            # We then look at all our existing traces and add the new found traces
             # to all of them sequentially
             for existing_branch in current_branches:
-                # The number of current subbranches is basically multiplied 
+                # The number of current subbranches is basically multiplied
                 # by the number of appending branches
                 for new_branch in appending_branches:
                     new_traces.append(existing_branch + new_branch)

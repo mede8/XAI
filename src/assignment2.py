@@ -1,13 +1,13 @@
-import json
-from anytree import Node, RenderTree, search
+from anytree import AnyNode, RenderTree
 from anytree.importer import JsonImporter
 
 
-def check_norm(node, norm):
+def check_norm(node: AnyNode, norm: dict) -> bool:
     """Annotates the tree with a violation status.
 
     :param node: the current node to check.
     :param norm: the rulebook to check against.
+    :return: True if the node violates the norm, False otherwise.
     """
     # check the leaves first
     if node.is_leaf:

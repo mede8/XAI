@@ -1,11 +1,11 @@
 import json
-from anytree import Node, RenderTree, search
+from anytree import AnyNode, RenderTree, search
 from anytree.importer import DictImporter
 import json
 from anytree.importer import JsonImporter
 
 
-def computeTraces(current_node, current_trace):
+def computeTraces(current_node: AnyNode, current_trace: list[AnyNode]) -> list[list[AnyNode]]:
     """Recursively builds all possible execution traces from a given node.
 
     For OR nodes, each child becomes its own separate branch. For SEQ/AND
@@ -33,7 +33,7 @@ def computeTraces(current_node, current_trace):
         return current_branches
 
 
-def is_norm_violated(trace, norm):
+def is_norm_violated(trace: list[AnyNode], norm: dict) -> bool:
     """Checks whether a given trace violates a norm.
 
     For prohibitions (P), the trace violates if any action in it appears in the
@@ -49,7 +49,7 @@ def is_norm_violated(trace, norm):
     return False
 
 
-def is_trace_feasible(trace, initial_beliefs, goal):
+def is_trace_feasible(trace: list[AnyNode], initial_beliefs: list[str], goal: list[str]) -> bool:
     """Simulates executing a trace step by step and checks if it's actually
     doable.
 
@@ -70,7 +70,7 @@ def is_trace_feasible(trace, initial_beliefs, goal):
     return all(g in beliefs for g in goal)
 
 
-def compute_trace_cost(trace):
+def compute_trace_cost(trace: list[AnyNode]) -> list[float]:
     """Sums up the cost vectors of all action nodes in a trace.
 
     Each action node has a list of costs, one per value dimension (e.g.
@@ -90,7 +90,7 @@ def compute_trace_cost(trace):
     return total_costs if total_costs is not None else [0.0]
 
 
-def is_preferred(costs1, costs2, preference_order):
+def is_preferred(costs1: list[float], costs2: list[float], preference_order: list[int]) -> bool:
     """Returns True if costs1 is strictly better than costs2 given the user's
     preferences.
 
@@ -106,8 +106,8 @@ def is_preferred(costs1, costs2, preference_order):
     return False
 
 
-def explain_action(trace, action_name, root, initial_beliefs, norm,
-                   preferences):
+def explain_action(trace: list[AnyNode], action_name: str, root: AnyNode, initial_beliefs: list[str], norm: dict,
+                   preferences: list) -> list[str]:
     """Generates a structured explanation for why a specific action was
     performed.
 
@@ -231,7 +231,8 @@ def explain_action(trace, action_name, root, initial_beliefs, norm,
     return explanations
 
 
-def main(json_tree, norm, goal, beliefs, preferences, action_to_explain):
+def main(json_tree: dict, norm: dict, goal: list[str],
+         beliefs: list[str], preferences: list, action_to_explain: str) -> tuple[list[str], list[str]]:
     """Main entry point that selects the best trace and generates an
     explanation.
 
