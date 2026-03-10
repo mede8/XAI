@@ -30,7 +30,7 @@ All assignments use **Python 3** and the [`anytree`](https://pypi.org/project/an
 
 ## Part 2 — Natural Language Explanation Generator
 
-This builds on Assignment 4 to translate formal explanations into plain English, targeting non-expert end-users with no knowledge of the agent's internal mechanisms. We used a hybrid approach that takes the generated structured factors from assignment 4 and through a rule-based implementation, each factor type maps to a sentence template. Finally, these explanations are further enhanced by a prompted Gemini synthesis that rewrites everything into a coherent and understandable text for the user. The generated explanations can be found in the file `src/explanations_output.txt`.
+This builds on Assignment 4 to translate formal explanations into plain English, targeting non-expert end-users with no knowledge of the agent's internal mechanisms. We used a hybrid approach that takes the generated structured factors from assignment 4 and through a rule-based implementation, each factor type maps to a sentence template. Finally, these explanations are further enhanced by a prompted Gemini synthesis that rewrites everything into a coherent and understandable text for the user. The generated explanations can be found in the file `src/explanations_output.txt`. The code for natural language explanations can be found in `src/part2.py`.
 
 ---
 
